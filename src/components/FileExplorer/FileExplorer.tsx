@@ -1,11 +1,11 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { listFiles, createFile, deleteFile, detectLanguage, readFile, renameFile } from '../../db/schema'
 import { useEditorStore } from '../../stores/editorStore'
 import { useUIStore } from '../../stores/uiStore'
 import { buildTree, TreeNode } from '../../utils/treeUtils'
 import TreeItem from './TreeItem'
 import styles from './FileExplorer.module.css'
-import { Trash, FilePlus, File as LucideFile } from 'lucide-react'
+import { Trash, File as LucideFile } from 'lucide-react'
 
 interface FileEntry {
   path: string
@@ -80,7 +80,7 @@ export default function FileExplorer() {
 
   const handleDelete = async (path: string) => {
     if (!projectId) return
-    if (!confirm(`Delete "${path.split('/').pop()}"?`)) return
+    if (!window.confirm(`Delete "${path.split('/').pop()}"?`)) return
     await deleteFile(path)
     await refresh(projectId)
     const tab = openTabs.find(t => t.filePath === path)
