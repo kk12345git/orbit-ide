@@ -1,0 +1,46 @@
+.statusBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 24px;
+  padding: 0 0.75rem;
+  background: var(--color-accent);
+  color: #fff;
+  font-size: 0.72rem;
+  font-family: var(--font-ui);
+  user-select: none;
+  z-index: var(--z-statusbar);
+}
+
+.left, .right {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.item {
+  opacity: 0.9;
+  white-space: nowrap;
+}
+
+.offline {
+  background: #f85149;
+  color: #fff;
+  padding: 0 0.4rem;
+  border-radius: 3px;
+  font-weight: 600;
+}
+
+.btn {
+  background: transparent;
+  border: none;
+  color: rgba(255,255,255,0.85);
+  cursor: pointer;
+  font-size: 0.72rem;
+  font-family: inherit;
+  padding: 0 0.25rem;
+  border-radius: 3px;
+  transition: background 0.1s, color 0.1s;
+  white-space: nowrap;
+}
+.btn:hover { background: rgba(255,255,255,0.15); color: #fff; }

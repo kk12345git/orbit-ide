@@ -1,0 +1,62 @@
+.shell {
+  display: grid;
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--color-bg-primary);
+  color: var(--color-text-primary);
+
+  /* Desktop: sidebar | editor + ai-panel */
+  grid-template-columns: auto 1fr;
+  grid-template-rows: 1fr auto auto; /* editor, terminal, status bar */
+  grid-template-areas:
+    "sidebar main"
+    "sidebar terminal"
+    "statusbar statusbar";
+}
+
+.shell.aiOpen {
+  grid-template-columns: auto 1fr auto;
+  grid-template-areas:
+    "sidebar main ai"
+    "sidebar terminal terminal"
+    "statusbar statusbar statusbar";
+}
+
+.sidebarArea  { grid-area: sidebar; }
+.mainArea     { grid-area: main; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.terminalArea { grid-area: terminal; }
+.aiArea       { grid-area: ai; }
+.statusArea   { grid-area: statusbar; }
+
+/* ── Mobile ────────────────────────────────────── */
+@media (max-width: 719px) {
+  .shell,
+  .shell.aiOpen {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr auto auto;
+    grid-template-areas:
+      "main"
+      "terminal"
+      "statusbar";
+  }
+
+  .sidebarArea {
+    display: none;
+    position: fixed;
+    inset: 0 auto 0 0;
+    width: 260px;
+    z-index: var(--z-sidebar);
+    background: var(--color-bg-secondary);
+  }
+
+  .sidebarArea.open {
+    display: flex;
+  }
+
+  .aiArea {
+    position: fixed;
+    inset: 0;
+    z-index: var(--z-modal);
+    grid-area: unset;
+  }
+}

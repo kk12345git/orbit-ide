@@ -1,0 +1,100 @@
+/* ============================================================
+   ORBIT IDE — Design Tokens
+   All CSS custom properties live here.
+   Dark theme is the default; light theme overrides in light.css
+   ============================================================ */
+
+:root {
+  /* --- Background layers --- */
+  --color-bg:            #0D1117;   /* page background */
+  --color-surface:       #161B22;   /* panels, sidebar */
+  --color-surface-2:     #1C2128;   /* cards, dropdowns */
+  --color-surface-hover: #21262D;   /* hover state */
+  --color-border:        #30363D;   /* borders */
+  --color-border-subtle: #21262D;   /* faint dividers */
+
+  /* --- Text --- */
+  --color-text:          #E6EDF3;   /* primary text */
+  --color-text-muted:    #8B949E;   /* secondary / muted */
+  --color-text-faint:    #484F58;   /* placeholders */
+  --color-text-inverse:  #0D1117;   /* text on light surface */
+
+  /* --- Accent — ORBIT blue/purple gradient pair --- */
+  --color-accent:        #58A6FF;   /* primary interactive */
+  --color-accent-hover:  #79B8FF;
+  --color-accent-subtle: #1F3348;   /* accent background wash */
+  --color-purple:        #BC8CFF;   /* secondary accent */
+
+  /* --- Semantic --- */
+  --color-success:       #3FB950;
+  --color-warning:       #D29922;
+  --color-error:         #F85149;
+  --color-info:          #58A6FF;
+
+  /* --- Editor specific --- */
+  --editor-bg:           #0D1117;
+  --editor-gutter-bg:    #161B22;
+  --editor-active-line:  #1C2128;
+  --editor-selection:    rgba(56, 139, 253, 0.25);
+  --editor-cursor:       #E6EDF3;
+
+  /* --- AI Panel --- */
+  --ai-panel-bg:         #161B22;
+  --ai-user-bubble:      #1F3348;
+  --ai-bot-bubble:       #1C2128;
+
+  /* --- Terminal --- */
+  --terminal-bg:         #0D1117;
+  --terminal-text:       #56D364;  /* green prompt */
+  --terminal-prompt:     #58A6FF;
+
+  /* --- Typography --- */
+  --editor-font-family:  'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+  --ui-font-family:      -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --editor-font-size:    14px;
+  --editor-line-height:  1.6;
+  --ui-font-size:        13px;
+
+  /* --- Spacing --- */
+  --spacing-1: 4px;
+  --spacing-2: 8px;
+  --spacing-3: 12px;
+  --spacing-4: 16px;
+  --spacing-5: 20px;
+  --spacing-6: 24px;
+  --spacing-8: 32px;
+
+  /* --- Layout dimensions --- */
+  --sidebar-width:         240px;
+  --sidebar-min-width:     160px;
+  --sidebar-max-width:     480px;
+  --ai-panel-width:        320px;
+  --terminal-height:       220px;
+  --terminal-min-height:   80px;
+  --status-bar-height:     24px;
+  --tab-bar-height:        35px;
+  --bottom-nav-height:     56px;
+  --touch-toolbar-height:  44px;
+
+  /* --- Transitions --- */
+  --transition-fast:   100ms ease;
+  --transition-base:   200ms ease;
+  --transition-slow:   350ms ease;
+
+  /* --- Border radius --- */
+  --radius-sm:  4px;
+  --radius-md:  6px;
+  --radius-lg:  10px;
+
+  /* --- Shadows --- */
+  --shadow-sm:  0 1px 3px rgba(0,0,0,0.4);
+  --shadow-md:  0 4px 12px rgba(0,0,0,0.5);
+  --shadow-lg:  0 8px 24px rgba(0,0,0,0.6);
+
+  /* --- Z indices --- */
+  --z-sidebar:       10;
+  --z-overlay:       50;
+  --z-modal:        100;
+  --z-toast:        200;
+  --z-touch-toolbar: 300;
+}
