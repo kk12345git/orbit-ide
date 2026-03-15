@@ -45,7 +45,12 @@
   padding: 0.3rem 0;
 }
 
-.fileItem {
+.treeNode {
+  display: flex;
+  flex-direction: column;
+}
+
+.item {
   display: flex;
   align-items: center;
   gap: 0.4rem;
@@ -59,10 +64,25 @@
   overflow: hidden;
 }
 
-.fileItem:hover { background: var(--color-bg-hover); color: var(--color-text-primary); }
-.fileItem.active { background: var(--color-accent-muted); color: var(--color-accent); }
+.item:hover { background: var(--color-bg-hover); color: var(--color-text-primary); }
+.item.active { background: var(--color-accent-muted); color: var(--color-accent); }
 
-.icon { flex-shrink: 0; font-size: 0.85rem; }
+.arrow {
+  width: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.6rem;
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
+.children {
+  display: flex;
+  flex-direction: column;
+}
+
+.icon { flex-shrink: 0; font-size: 0.85rem; display: flex; align-items: center; justify-content: center; }
 .name { flex: 1; overflow: hidden; text-overflow: ellipsis; }
 
 .renameInput {

@@ -1,25 +1,16 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
-import { listFiles, createFile, deleteFile, detectLanguage, readFile } from '../../db/schema'
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import { listFiles, createFile, deleteFile, detectLanguage, readFile, renameFile } from '../../db/schema'
 import { useEditorStore } from '../../stores/editorStore'
 import { useUIStore } from '../../stores/uiStore'
+import { buildTree, TreeNode } from '../../utils/treeUtils'
+import TreeItem from './TreeItem'
 import styles from './FileExplorer.module.css'
+import { Trash, FilePlus, File as LucideFile } from 'lucide-react'
 
 interface FileEntry {
   path: string
   name: string
   language: string
-}
-
-const FILE_ICONS: Record<string, string> = {
-  js: '📜', jsx: '⚛️', ts: '🔷', tsx: '⚛️', py: '🐍',
-  css: '🎨', scss: '🎨', html: '🌐', json: '📋',
-  md: '📝', sql: '🗄️', sh: '🖥️', bash: '🖥️',
-  rs: '🦀', go: '🐹', txt: '📄',
-}
-
-function getIcon(name: string): string {
-  const ext = name.split('.').pop()?.toLowerCase() ?? ''
-  return FILE_ICONS[ext] ?? '📄'
 }
 
 export default function FileExplorer() {
@@ -36,19 +27,18 @@ export default function FileExplorer() {
   const [creatingNew, setCreatingNew] = useState(false)
   const [newFileName, setNewFileName] = useState('')
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; path: string } | null>(null)
-  const renameRef = useRef<HTMLInputElement>(null)
   const newFileRef = useRef<HTMLInputElement>(null)
 
   const activeFilePath = openTabs.find(t => t.id === activeTabId)?.filePath
 
-  // Load project from DB
+  const tree = useMemo(() => buildTree(files), [files])
+
   const refresh = useCallback(async (pid: string) => {
     const loaded = await listFiles(pid)
     setFiles(loaded as FileEntry[])
   }, [])
 
   useEffect(() => {
-    // Read from localStorage (set by App.tsx after init)
     const pid = localStorage.getItem('orbit-active-project')
     if (pid) {
       setProjectId(pid)
@@ -62,15 +52,14 @@ export default function FileExplorer() {
     return () => window.removeEventListener('orbit-project-loaded', onStorage)
   }, [refresh])
 
-  const handleOpenFile = async (file: FileEntry) => {
-    const existingTab = openTabs.find(t => t.filePath === file.path)
+  const handleOpenFile = async (node: TreeNode) => {
+    const existingTab = openTabs.find(t => t.filePath === node.path)
     if (existingTab) {
       useEditorStore.getState().setActiveTab(existingTab.id)
     } else {
-      const content = await readFile(file.path) ?? ''
-      openTab(file.path, file.name, file.language, content)
+      const content = await readFile(node.path) ?? ''
+      openTab(node.path, node.name, detectLanguage(node.name), content)
     }
-    // On mobile, close sidebar after opening file
     if (window.innerWidth < 720) setSidebarOpen(false)
   }
 
@@ -99,6 +88,30 @@ export default function FileExplorer() {
     setContextMenu(null)
   }
 
+  const handleRenameConfirm = async () => {
+    if (!projectId || !renamingPath) return
+    const newName = renameValue.trim()
+    if (!newName || newName === renamingPath.split('/').pop()) {
+      setRenamingPath(null)
+      return
+    }
+    try {
+      const newPath = await renameFile(renamingPath, newName)
+      await refresh(projectId)
+      
+      const tab = openTabs.find(t => t.filePath === renamingPath)
+      if (tab) {
+        closeTab(tab.id)
+        const content = await readFile(newPath) ?? ''
+        openTab(newPath, newName, detectLanguage(newName), content)
+      }
+      setRenamingPath(null)
+    } catch (e) {
+      console.error(e)
+      setRenamingPath(null)
+    }
+  }
+
   if (!projectId) {
     return (
       <div className={styles.explorer}>
@@ -119,37 +132,31 @@ export default function FileExplorer() {
       </div>
 
       <div className={styles.fileList}>
-        {files.map(file => (
-          <div
-            key={file.path}
-            className={`${styles.fileItem} ${file.path === activeFilePath ? styles.active : ''}`}
-            onClick={() => handleOpenFile(file)}
-            onContextMenu={e => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, path: file.path }) }}
-            title={file.name}
-          >
-            {renamingPath === file.path ? (
-              <input
-                ref={renameRef}
-                className={styles.renameInput}
-                value={renameValue}
-                onChange={e => setRenameValue(e.target.value)}
-                onBlur={() => setRenamingPath(null)}
-                onKeyDown={e => {
-                  if (e.key === 'Escape') setRenamingPath(null)
-                }}
-                onClick={e => e.stopPropagation()}
-              />
-            ) : (
-              <>
-                <span className={styles.icon}>{getIcon(file.name)}</span>
-                <span className={styles.name}>{file.name}</span>
-              </>
-            )}
-          </div>
+        {tree.map(node => (
+          <TreeItem
+            key={node.path}
+            node={node}
+            level={0}
+            activePath={activeFilePath}
+            onFileClick={handleOpenFile}
+            onContextMenu={(e, path) => {
+              e.preventDefault()
+              setContextMenu({ x: e.clientX, y: e.clientY, path })
+            }}
+            renamingPath={renamingPath}
+            renameValue={renameValue}
+            onRenameChange={setRenameValue}
+            onRenameBlur={handleRenameConfirm}
+            onRenameKeyDown={e => {
+              if (e.key === 'Enter') handleRenameConfirm()
+              if (e.key === 'Escape') setRenamingPath(null)
+            }}
+          />
         ))}
+
         {creatingNew && (
-          <div className={styles.fileItem}>
-            <span className={styles.icon}>📄</span>
+          <div className={styles.item} style={{ paddingLeft: '20px' }}>
+            <span className={styles.icon}><LucideFile size={14} /></span>
             <input
               ref={newFileRef}
               className={styles.renameInput}
@@ -164,6 +171,7 @@ export default function FileExplorer() {
             />
           </div>
         )}
+
         {files.length === 0 && !creatingNew && (
           <p className={styles.empty}>No files yet. Click + to create one.</p>
         )}
@@ -179,10 +187,9 @@ export default function FileExplorer() {
             setRenamingPath(contextMenu.path)
             setRenameValue(contextMenu.path.split('/').pop() ?? '')
             setContextMenu(null)
-            setTimeout(() => renameRef.current?.focus(), 50)
-          }}>✏️ Rename</button>
+          }}>Rename</button>
           <button className={styles.deleteBtn} onClick={() => handleDelete(contextMenu.path)}>
-            🗑️ Delete
+            <Trash size={14} /> Delete
           </button>
         </div>
       )}
