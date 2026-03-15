@@ -1,186 +1,76 @@
-import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { fileSystemService } from '../services/fileSystemService';
 
-export interface Tab {
-  id: string
-  filePath: string
-  name: string
-  language: string
-  isPinned: boolean
-  isDirty: boolean
+interface EditorFile {
+  id: string;
+  name: string;
+  content: string;
+  language: string;
 }
 
 interface EditorState {
-  openTabs: Tab[]
-  activeTabId: string | null
-  fileContents: Record<string, string>   // filePath → content
-  cursorLine: number
-  cursorCol: number
-  selection: string
-  history: Record<string, { past: string[], future: string[] }>
-
-  // Actions
-  openTab: (filePath: string, name: string, language: string, content: string) => void
-  closeTab: (tabId: string) => void
-  setActiveTab: (tabId: string) => void
-  setContent: (filePath: string, content: string) => void
-  markDirty: (filePath: string, dirty: boolean) => void
-  pinTab: (tabId: string) => void
-  setCursor: (line: number, col: number) => void
-  setSelection: (text: string) => void
-  reorderTabs: (fromIndex: number, toIndex: number) => void
-  pushHistory: (filePath: string, content: string) => void
-  undo: (filePath: string) => string | null
-  redo: (filePath: string) => string | null
+  files: Record<string, EditorFile>;
+  activeFileId: string | null;
+  setFiles: (files: Record<string, EditorFile>) => void;
+  openFile: (id: string) => void;
+  closeFile: (id: string) => void;
+  updateFileContent: (id: string, content: string) => void;
+  addFile: (name: string, content: string, language: string) => Promise<void>;
 }
 
 export const useEditorStore = create<EditorState>()(
   persist(
-    (set, get) => ({
-      openTabs: [],
-      activeTabId: null,
-      fileContents: {},
-      cursorLine: 1,
-      cursorCol: 1,
-      selection: '',
-      history: {},
-
-      openTab: (filePath, name, language, content) => {
-        const existing = get().openTabs.find(t => t.filePath === filePath)
-        if (existing) {
-          set({ activeTabId: existing.id })
-          return
+    (set: (state: Partial<EditorState> | ((state: EditorState) => Partial<EditorState>), replace?: boolean) => void) => ({
+      files: {
+        '1': { id: '1', name: 'App.tsx', content: '// Welcome to ORBIT IDE\n\nexport default function App() {\n  return <div>Hello World</div>;\n}', language: 'typescript' },
+        '2': { id: '2', name: 'styles.css', content: 'body {\n  background: #000;\n  color: #fff;\n}', language: 'css' },
+      },
+      activeFileId: '1',
+      setFiles: (files: Record<string, EditorFile>) => set({ files }),
+      openFile: (id: string) => set({ activeFileId: id }),
+      closeFile: (id: string) => set((state: EditorState) => {
+        const newFiles = { ...state.files };
+        delete newFiles[id];
+        return { 
+          files: newFiles, 
+          activeFileId: state.activeFileId === id ? null : state.activeFileId 
+        };
+      }),
+      addFile: async (name: string, content: string, language: string) => {
+        const id = Math.random().toString(36).substr(2, 9);
+        await fileSystemService.saveFile(name, content);
+        set((state: EditorState) => ({
+          files: { ...state.files, [id]: { id, name, content, language } },
+          activeFileId: id,
+        }));
+      },
+      updateFileContent: (id: string, content: string) => set((state: EditorState) => {
+        const file = state.files[id];
+        if (file) {
+          fileSystemService.saveFile(file.name, content);
+          return {
+            files: {
+              ...state.files,
+              [id]: { ...file, content }
+            }
+          };
         }
-        const id = `tab-${Date.now()}-${Math.random().toString(36).slice(2)}`
-        const tab: Tab = { id, filePath, name, language, isPinned: false, isDirty: false }
-        set(s => ({
-          openTabs: [...s.openTabs, tab],
-          activeTabId: id,
-          fileContents: { ...s.fileContents, [filePath]: content }
-        }))
-      },
-
-      closeTab: (tabId) => {
-        const { openTabs, activeTabId } = get()
-        const idx = openTabs.findIndex(t => t.id === tabId)
-        const next = openTabs.filter(t => t.id !== tabId)
-        let nextActive = activeTabId
-        if (activeTabId === tabId) {
-          const newActive = next[Math.min(idx, next.length - 1)]
-          nextActive = newActive?.id ?? null
-        }
-        set({ openTabs: next, activeTabId: nextActive })
-      },
-
-      setActiveTab: (tabId) => set({ activeTabId: tabId }),
-
-      setContent: (filePath, content) =>
-        set(s => ({ fileContents: { ...s.fileContents, [filePath]: content } })),
-
-      markDirty: (filePath, dirty) =>
-        set(s => ({
-          openTabs: s.openTabs.map(t =>
-            t.filePath === filePath ? { ...t, isDirty: dirty } : t
-          )
-        })),
-
-      pinTab: (tabId) =>
-        set(s => ({
-          openTabs: s.openTabs.map(t =>
-            t.id === tabId ? { ...t, isPinned: !t.isPinned } : t
-          )
-        })),
-
-      setCursor: (cursorLine, cursorCol) => set({ cursorLine, cursorCol }),
-      setSelection: (selection) => set({ selection }),
-
-      reorderTabs: (fromIndex, toIndex) => {
-        const tabs = [...get().openTabs]
-        const [moved] = tabs.splice(fromIndex, 1)
-        tabs.splice(toIndex, 0, moved)
-        set({ openTabs: tabs })
-      },
-
-      pushHistory: (filePath, content) => {
-        set(s => {
-          const fileHistory = s.history[filePath] ?? { past: [], future: [] }
-          if (fileHistory.past[fileHistory.past.length - 1] === content) {
-            return s
-          }
-          return {
-            history: {
-              ...s.history,
-              [filePath]: {
-                past: [...fileHistory.past, content],
-                future: []
-              }
-            }
-          }
-        })
-      },
-
-      undo: (filePath) => {
-        let prevContent: string | null = null
-        set(s => {
-          const fileHistory = s.history[filePath] ?? { past: [], future: [] }
-          if (fileHistory.past.length === 0) return s
-          
-          const newPast = [...fileHistory.past]
-          const currentContent = s.fileContents[filePath] || ''
-          const target = newPast.pop()!
-          prevContent = target
-          
-          return {
-            history: {
-              ...s.history,
-              [filePath]: {
-                past: newPast,
-                future: [currentContent, ...fileHistory.future]
-              }
-            },
-            fileContents: {
-              ...s.fileContents,
-              [filePath]: target
-            }
-          }
-        })
-        return prevContent
-      },
-
-      redo: (filePath) => {
-        let nextContent: string | null = null
-        set(s => {
-          const fileHistory = s.history[filePath] ?? { past: [], future: [] }
-          if (fileHistory.future.length === 0) return s
-          
-          const newFuture = [...fileHistory.future]
-          const currentContent = s.fileContents[filePath] || ''
-          const target = newFuture.shift()!
-          nextContent = target
-          
-          return {
-            history: {
-              ...s.history,
-              [filePath]: {
-                past: [...fileHistory.past, currentContent],
-                future: newFuture
-              }
-            },
-            fileContents: {
-              ...s.fileContents,
-              [filePath]: target
-            }
-          }
-        })
-        return nextContent
-      },
+        return state;
+      }),
+      deleteFile: (id: string) => set((state: EditorState) => {
+        const newFiles = { ...state.files };
+        delete newFiles[id];
+        return { 
+          files: newFiles, 
+          activeFileId: state.activeFileId === id ? null : state.activeFileId 
+        };
+      }),
     }),
     {
-      name: 'orbit-editor-tabs',
-      partialize: (state) => ({
-        openTabs: state.openTabs,
-        activeTabId: state.activeTabId,
-      }),
+      name: 'orbit-editor-storage',
+      storage: createJSONStorage(() => AsyncStorage),
     }
   )
-)
+);
