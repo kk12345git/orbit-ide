@@ -21,7 +21,7 @@ interface UIState {
   setIsOnline: (online: boolean) => void
 }
 
-export const useUIStore = create<UIState>((set, get) => ({
+export const useUIStore = create<UIState>((set) => ({
   sidebarOpen: true,
   aiPanelOpen: false,
   terminalOpen: false,

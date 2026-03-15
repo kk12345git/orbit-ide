@@ -52,7 +52,7 @@ export default function CodeEditor({ filePath, language }: Props) {
   }, [])
 
   // Auto-save
-  useAutoSave(filePath, localContent)
+  useAutoSave(filePath)
 
   // Debounced highlight (100ms)
   const highlighted = useMemo(() => {
