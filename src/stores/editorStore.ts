@@ -17,6 +17,7 @@ interface EditorState {
   cursorLine: number
   cursorCol: number
   selection: string
+  history: Record<string, { past: string[], future: string[] }>
 
   // Actions
   openTab: (filePath: string, name: string, language: string, content: string) => void
@@ -28,6 +29,9 @@ interface EditorState {
   setCursor: (line: number, col: number) => void
   setSelection: (text: string) => void
   reorderTabs: (fromIndex: number, toIndex: number) => void
+  pushHistory: (filePath: string, content: string) => void
+  undo: (filePath: string) => string | null
+  redo: (filePath: string) => string | null
 }
 
 export const useEditorStore = create<EditorState>()(
@@ -39,6 +43,7 @@ export const useEditorStore = create<EditorState>()(
       cursorLine: 1,
       cursorCol: 1,
       selection: '',
+      history: {},
 
       openTab: (filePath, name, language, content) => {
         const existing = get().openTabs.find(t => t.filePath === filePath)
@@ -94,6 +99,80 @@ export const useEditorStore = create<EditorState>()(
         const [moved] = tabs.splice(fromIndex, 1)
         tabs.splice(toIndex, 0, moved)
         set({ openTabs: tabs })
+      },
+
+      pushHistory: (filePath, content) => {
+        set(s => {
+          const fileHistory = s.history[filePath] ?? { past: [], future: [] }
+          if (fileHistory.past[fileHistory.past.length - 1] === content) {
+            return s
+          }
+          return {
+            history: {
+              ...s.history,
+              [filePath]: {
+                past: [...fileHistory.past, content],
+                future: []
+              }
+            }
+          }
+        })
+      },
+
+      undo: (filePath) => {
+        let prevContent: string | null = null
+        set(s => {
+          const fileHistory = s.history[filePath] ?? { past: [], future: [] }
+          if (fileHistory.past.length === 0) return s
+          
+          const newPast = [...fileHistory.past]
+          const currentContent = s.fileContents[filePath] || ''
+          const target = newPast.pop()!
+          prevContent = target
+          
+          return {
+            history: {
+              ...s.history,
+              [filePath]: {
+                past: newPast,
+                future: [currentContent, ...fileHistory.future]
+              }
+            },
+            fileContents: {
+              ...s.fileContents,
+              [filePath]: target
+            }
+          }
+        })
+        return prevContent
+      },
+
+      redo: (filePath) => {
+        let nextContent: string | null = null
+        set(s => {
+          const fileHistory = s.history[filePath] ?? { past: [], future: [] }
+          if (fileHistory.future.length === 0) return s
+          
+          const newFuture = [...fileHistory.future]
+          const currentContent = s.fileContents[filePath] || ''
+          const target = newFuture.shift()!
+          nextContent = target
+          
+          return {
+            history: {
+              ...s.history,
+              [filePath]: {
+                past: [...fileHistory.past, currentContent],
+                future: newFuture
+              }
+            },
+            fileContents: {
+              ...s.fileContents,
+              [filePath]: target
+            }
+          }
+        })
+        return nextContent
       },
     }),
     {

@@ -2,10 +2,13 @@ import { useState, useRef, useEffect } from 'react'
 import { useAIStore } from '../../stores/aiStore'
 import { useEditorStore } from '../../stores/editorStore'
 import { useUIStore } from '../../stores/uiStore'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import { highlightCode } from '../../utils/highlight'
 import styles from './AIPanel.module.css'
 
 export default function AIPanel() {
-  const { messages, isLoading, error, addUserMessage, startStreaming, appendToken, finalizeStream, setError, clearHistory } = useAIStore()
+  const { messages, isLoading, error, addUserMessage, startStreaming, appendToken, finalizeStream, setError, clearHistory, loadHistory } = useAIStore()
   const setAIPanelOpen = useUIStore(s => s.setAIPanelOpen)
   const activeTabId = useEditorStore(s => s.activeTabId)
   const openTabs = useEditorStore(s => s.openTabs)
@@ -18,10 +21,15 @@ export default function AIPanel() {
 
   const activeTab = openTabs.find(t => t.id === activeTabId)
 
+  // Load history when active tab changes
+  useEffect(() => {
+    loadHistory(activeTab?.filePath)
+  }, [activeTab?.filePath, loadHistory])
+
   // Auto-scroll to bottom on new messages
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages.length, isLoading])
+  }, [messages.length, isLoading, messages[messages.length - 1]?.content.length])
 
   const handleSend = async () => {
     const text = input.trim()
@@ -109,6 +117,46 @@ export default function AIPanel() {
     inputRef.current?.focus()
   }
 
+  const exportHistory = () => {
+    if (messages.length === 0) return
+    const text = messages.map(m => `### ${m.role === 'user' ? 'User' : 'Orbit AI'} (${new Date(m.timestamp).toLocaleString()})\n\n${m.content}\n`).join('\n---\n\n')
+    const blob = new Blob([text], { type: 'text/markdown' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `orbit-chat-${activeTab?.name || 'global'}.md`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const renderers: any = {
+    code({ node, inline, className, children, ...props }: any) {
+      const match = /language-(\w+)/.exec(className || '')
+      const lang = match ? match[1] : ''
+      if (!inline && lang) {
+        const highlighted = highlightCode(String(children).replace(/\n$/, ''), lang)
+        return (
+          <div style={{ position: 'relative', marginTop: '0.5rem', marginBottom: '0.5rem', backgroundColor: 'var(--color-bg-panel)', borderRadius: '4px', overflow: 'hidden' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.25rem 0.5rem', fontSize: '0.75rem', backgroundColor: 'rgba(255, 255, 255, 0.1)', color: 'var(--color-text-dim)' }}>
+              <span>{lang}</span>
+              <button 
+                onClick={() => navigator.clipboard.writeText(String(children))}
+                style={{ background: 'none', border: 'none', color: 'var(--color-primary)', cursor: 'pointer' }}
+                title="Copy code"
+              >
+                Copy
+              </button>
+            </div>
+            <pre className={className} style={{ margin: 0, padding: '0.5rem', overflowX: 'auto', fontSize: '0.85rem' }}>
+              <code dangerouslySetInnerHTML={{ __html: highlighted }} />
+            </pre>
+          </div>
+        )
+      }
+      return <code className={className} style={{ backgroundColor: 'rgba(255,255,255,0.1)', padding: '2px 4px', borderRadius: '4px' }} {...props}>{children}</code>
+    }
+  }
+
   return (
     <div className={styles.panel}>
       {/* Header */}
@@ -120,7 +168,10 @@ export default function AIPanel() {
               Explain
             </button>
           )}
-          <button className={styles.actionBtn} onClick={clearHistory} title="Clear conversation">
+          <button className={styles.actionBtn} onClick={exportHistory} title="Export chat history" disabled={messages.length === 0}>
+            Export
+          </button>
+          <button className={styles.actionBtn} onClick={() => clearHistory(activeTab?.filePath)} title="Clear conversation" disabled={messages.length === 0}>
             Clear
           </button>
           <button className={styles.closeBtn} onClick={() => setAIPanelOpen(false)} title="Close AI panel">
@@ -140,7 +191,15 @@ export default function AIPanel() {
         {messages.map(msg => (
           <div key={msg.id} className={`${styles.message} ${styles[msg.role]}`}>
             <div className={styles.bubble}>
-              <pre className={styles.content}>{msg.content}</pre>
+              {msg.role === 'user' ? (
+                <pre className={styles.content} style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit' }}>{msg.content}</pre>
+              ) : (
+                <div className={styles.content} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', lineHeight: 1.5 }}>
+                  <ReactMarkdown remarkPlugins={[remarkGfm]} components={renderers}>
+                    {msg.content}
+                  </ReactMarkdown>
+                </div>
+              )}
             </div>
           </div>
         ))}

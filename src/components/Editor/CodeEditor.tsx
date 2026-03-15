@@ -5,6 +5,7 @@ import { useUIStore } from '../../stores/uiStore'
 import { highlightCode } from '../../utils/highlight'
 import { useScrollSync } from '../../hooks/useScrollSync'
 import { useAutoSave } from '../../hooks/useAutoSave'
+import TouchToolbar from './TouchToolbar'
 import styles from './CodeEditor.module.css'
 
 interface Props {
@@ -18,8 +19,13 @@ export default function CodeEditor({ filePath, language }: Props) {
   const markDirty = useEditorStore(s => s.markDirty)
   const setCursor = useEditorStore(s => s.setCursor)
   const setSelection = useEditorStore(s => s.setSelection)
-  const { tabSize, wordWrap, fontSize } = useSettingsStore()
+  const { tabSize, wordWrap, fontSize, setFontSize } = useSettingsStore()
   const findReplaceOpen = useUIStore(s => s.findReplaceOpen)
+
+  const pushHistory = useEditorStore(s => s.pushHistory)
+  const undo = useEditorStore(s => s.undo)
+  const redo = useEditorStore(s => s.redo)
+  const history = useEditorStore(s => s.history[filePath] ?? { past: [], future: [] })
 
   const content = fileContents[filePath] ?? ''
   const [localContent, setLocalContent] = useState(content)
@@ -28,6 +34,7 @@ export default function CodeEditor({ filePath, language }: Props) {
   const preRef = useRef<HTMLPreElement>(null)
   const gutterRef = useRef<HTMLDivElement>(null)
   const codeAreaRef = useRef<HTMLDivElement>(null)
+  const isUndoRedoRef = useRef(false)
   const [activeLine, setActiveLine] = useState(1)
 
   // Load content if missing (for restored tabs)
@@ -68,6 +75,15 @@ export default function CodeEditor({ filePath, language }: Props) {
   // Auto-save
   useAutoSave(filePath)
 
+  // Debounce history save
+  useEffect(() => {
+    if (isUndoRedoRef.current) return
+    const timeout = setTimeout(() => {
+      pushHistory(filePath, localContent)
+    }, 1000)
+    return () => clearTimeout(timeout)
+  }, [localContent, filePath, pushHistory])
+
   // Debounced highlight (100ms)
   const highlighted = useMemo(() => {
     return highlightCode(localContent, language) + '\n' // trailing newline keeps height consistent
@@ -78,12 +94,65 @@ export default function CodeEditor({ filePath, language }: Props) {
     return count
   }, [localContent])
 
+  const updateCursor = useCallback(() => {
+    const ta = textareaRef.current
+    if (!ta) return
+    const text = ta.value.slice(0, ta.selectionStart)
+    const lines = text.split('\n')
+    const line = lines.length
+    const col = lines[lines.length - 1].length + 1
+    setActiveLine(line)
+    setCursor(line, col)
+    setSelection(ta.value.slice(ta.selectionStart, ta.selectionEnd))
+  }, [setCursor, setSelection])
+
   const handleChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value
     setLocalContent(val)
     setContent(filePath, val)
     markDirty(filePath, true)
   }, [filePath, setContent, markDirty])
+
+  const handleToolbarInsert = useCallback((text: string) => {
+    pushHistory(filePath, localContent) // save before insert
+    const ta = textareaRef.current
+    if (!ta) return
+    const { selectionStart, selectionEnd } = ta
+    const newVal = localContent.slice(0, selectionStart) + text + localContent.slice(selectionEnd)
+    
+    setLocalContent(newVal)
+    setContent(filePath, newVal)
+    markDirty(filePath, true)
+    
+    requestAnimationFrame(() => {
+      ta.selectionStart = selectionStart + text.length
+      ta.selectionEnd = selectionStart + text.length
+      ta.focus()
+      updateCursor()
+    })
+  }, [localContent, filePath, pushHistory, setContent, markDirty, updateCursor])
+
+  const handleUndo = useCallback(() => {
+    isUndoRedoRef.current = true
+    const prev = undo(filePath)
+    if (prev !== null) {
+      setLocalContent(prev)
+      setContent(filePath, prev)
+      markDirty(filePath, true)
+    }
+    setTimeout(() => { isUndoRedoRef.current = false }, 100)
+  }, [undo, filePath, setContent, markDirty])
+
+  const handleRedo = useCallback(() => {
+    isUndoRedoRef.current = true
+    const next = redo(filePath)
+    if (next !== null) {
+      setLocalContent(next)
+      setContent(filePath, next)
+      markDirty(filePath, true)
+    }
+    setTimeout(() => { isUndoRedoRef.current = false }, 100)
+  }, [redo, filePath, setContent, markDirty])
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     const ta = e.currentTarget
@@ -155,24 +224,45 @@ export default function CodeEditor({ filePath, language }: Props) {
     }
   }, [tabSize, filePath, setContent, markDirty, localContent])
 
-  const updateCursor = useCallback(() => {
-    const ta = textareaRef.current
-    if (!ta) return
-    const text = ta.value.slice(0, ta.selectionStart)
-    const lines = text.split('\n')
-    const line = lines.length
-    const col = lines[lines.length - 1].length + 1
-    setActiveLine(line)
-    setCursor(line, col)
-    setSelection(ta.value.slice(ta.selectionStart, ta.selectionEnd))
-  }, [setCursor, setSelection])
-
   // Focus editor on mount / filePath change
   useEffect(() => {
     if (!findReplaceOpen) {
       textareaRef.current?.focus()
     }
   }, [filePath, findReplaceOpen])
+
+  const pinchDistRef = useRef<number | null>(null)
+
+  const handleTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length === 2) {
+      const dist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      )
+      pinchDistRef.current = dist
+    }
+  }, [])
+
+  const handleTouchMove = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length === 2 && pinchDistRef.current !== null) {
+      const dist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      )
+      const delta = dist - pinchDistRef.current
+      if (Math.abs(delta) > 40) { // sensitivity threshold
+        if (delta > 0) setFontSize(Math.min(fontSize + 1, 30)) // zoom in
+        else setFontSize(Math.max(fontSize - 1, 10)) // zoom out
+        pinchDistRef.current = dist // Reset reference to new distance
+      }
+    }
+  }, [fontSize, setFontSize])
+
+  const handleTouchEnd = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    if (e.touches.length < 2) {
+      pinchDistRef.current = null
+    }
+  }, [])
 
   const tabSizeCSSProp = { '--tab-size': tabSize } as React.CSSProperties
 
@@ -191,7 +281,13 @@ export default function CodeEditor({ filePath, language }: Props) {
   }
 
   return (
-    <div className={styles.editorRoot} style={tabSizeCSSProp}>
+    <div 
+      className={styles.editorRoot} 
+      style={tabSizeCSSProp}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+    >
       <div className={styles.editorBody}>
         {/* Line number gutter */}
         <div className={styles.gutter} ref={gutterRef} aria-hidden>
@@ -254,6 +350,13 @@ export default function CodeEditor({ filePath, language }: Props) {
           />
         </div>
       </div>
+      <TouchToolbar
+        onInsert={handleToolbarInsert}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
+        canUndo={history.past.length > 0}
+        canRedo={history.future.length > 0}
+      />
     </div>
   )
 }

@@ -31,21 +31,33 @@ interface OrbitSchema extends DBSchema {
       accessedAt: number
     }
   }
+  aiHistory: {
+    key: string   // file path | "global"
+    value: {
+      filePath: string
+      messages: any[]
+    }
+  }
 }
 
 const DB_NAME = 'orbit-ide'
-const DB_VERSION = 1
+const DB_VERSION = 2
 
 let dbPromise: Promise<IDBPDatabase<OrbitSchema>> | null = null
 
 function getDB(): Promise<IDBPDatabase<OrbitSchema>> {
   if (!dbPromise) {
     dbPromise = openDB<OrbitSchema>(DB_NAME, DB_VERSION, {
-      upgrade(db) {
-        const fileStore = db.createObjectStore('files', { keyPath: 'path' })
-        fileStore.createIndex('by-project', 'projectId')
-        db.createObjectStore('projects', { keyPath: 'id' })
-        db.createObjectStore('recents', { keyPath: 'filePath' })
+      upgrade(db, oldVersion) {
+        if (oldVersion < 1) {
+          const fileStore = db.createObjectStore('files', { keyPath: 'path' })
+          fileStore.createIndex('by-project', 'projectId')
+          db.createObjectStore('projects', { keyPath: 'id' })
+          db.createObjectStore('recents', { keyPath: 'filePath' })
+        }
+        if (oldVersion < 2) {
+          db.createObjectStore('aiHistory', { keyPath: 'filePath' })
+        }
       }
     })
   }
@@ -135,6 +147,23 @@ export async function getRecents() {
   const db = await getDB()
   const all = await db.getAll('recents')
   return all.sort((a, b) => b.accessedAt - a.accessedAt).slice(0, 10)
+}
+
+// ==================== AI History ====================
+export async function getAIHistory(filePath: string) {
+  const db = await getDB()
+  const row = await db.get('aiHistory', filePath)
+  return row?.messages ?? []
+}
+
+export async function saveAIHistory(filePath: string, messages: any[]): Promise<void> {
+  const db = await getDB()
+  await db.put('aiHistory', { filePath, messages })
+}
+
+export async function clearAIHistory(filePath: string): Promise<void> {
+  const db = await getDB()
+  await db.delete('aiHistory', filePath)
 }
 
 // ==================== Language detection ====================

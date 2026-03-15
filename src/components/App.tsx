@@ -61,11 +61,8 @@ export default function App() {
   useEffect(() => {
     const ui = useUIStore.getState()
     const handleKeyDown = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement
-      const isEditor = target.tagName === 'TEXTAREA'
-
       // Ctrl+I — toggle AI
-      if (e.ctrlKey && e.key === 'i' && !isEditor) {
+      if (e.ctrlKey && e.key.toLowerCase() === 'i') {
         e.preventDefault()
         ui.toggleAIPanel()
       }
