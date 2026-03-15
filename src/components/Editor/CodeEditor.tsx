@@ -23,16 +23,30 @@ export default function CodeEditor({ filePath, language }: Props) {
 
   const content = fileContents[filePath] ?? ''
   const [localContent, setLocalContent] = useState(content)
+  const [isLoading, setIsLoading] = useState(content === '' && !useEditorStore.getState().fileContents.hasOwnProperty(filePath))
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const preRef = useRef<HTMLPreElement>(null)
   const gutterRef = useRef<HTMLDivElement>(null)
   const codeAreaRef = useRef<HTMLDivElement>(null)
   const [activeLine, setActiveLine] = useState(1)
 
-  // Sync localContent when filePath changes
+  // Load content if missing (for restored tabs)
   useEffect(() => {
-    setLocalContent(fileContents[filePath] ?? '')
-  }, [filePath, fileContents])
+    if (!useEditorStore.getState().fileContents.hasOwnProperty(filePath)) {
+      setIsLoading(true)
+      import('../../db/schema').then(({ readFile }) => {
+        readFile(filePath).then(data => {
+          const val = data ?? ''
+          setContent(filePath, val)
+          setLocalContent(val)
+          setIsLoading(false)
+        })
+      })
+    } else {
+      setIsLoading(false)
+      setLocalContent(fileContents[filePath] ?? '')
+    }
+  }, [filePath, fileContents, setContent])
 
   // Scroll sync: textarea → pre overlay (pixel-perfect)
   useScrollSync(textareaRef, preRef)
@@ -161,6 +175,20 @@ export default function CodeEditor({ filePath, language }: Props) {
   }, [filePath, findReplaceOpen])
 
   const tabSizeCSSProp = { '--tab-size': tabSize } as React.CSSProperties
+
+  if (isLoading) {
+    return (
+      <div className={styles.editorLoading}>
+        <div className={styles.skeletonGutter}></div>
+        <div className={styles.skeletonBody}>
+          <div className={styles.skeletonLine} style={{ width: '60%' }}></div>
+          <div className={styles.skeletonLine} style={{ width: '80%' }}></div>
+          <div className={styles.skeletonLine} style={{ width: '40%' }}></div>
+          <div className={styles.skeletonLine} style={{ width: '70%' }}></div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className={styles.editorRoot} style={tabSizeCSSProp}>

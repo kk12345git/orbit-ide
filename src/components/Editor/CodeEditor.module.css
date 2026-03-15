@@ -96,10 +96,6 @@
   resize: none;
   overflow: hidden; /* scrolling handled by parent .codeArea */
   -webkit-text-fill-color: transparent;
-  spellcheck: false;
-  autocomplete: off;
-  autocorrect: off;
-  autocapitalize: off;
 }
 
 /* PRE — renders highlighted HTML (read-only) */
@@ -185,3 +181,37 @@
 :global(.token.important),
 :global(.token.bold)               { font-weight: bold; }
 :global(.token.italic)             { font-style: italic; }
+
+.editorLoading {
+  display: flex;
+  height: 100%;
+  background: var(--editor-bg);
+}
+
+.skeletonGutter {
+  width: 48px;
+  background: var(--editor-gutter-bg);
+  border-right: 1px solid var(--color-border-subtle);
+  flex-shrink: 0;
+}
+
+.skeletonBody {
+  flex: 1;
+  padding: var(--spacing-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3);
+}
+
+.skeletonLine {
+  height: 14px;
+  background: var(--color-bg-subtle);
+  border-radius: var(--radius-sm);
+  animation: pulse 1.5s infinite ease-in-out;
+}
+
+@keyframes pulse {
+  0% { opacity: 0.6; }
+  50% { opacity: 0.3; }
+  100% { opacity: 0.6; }
+}

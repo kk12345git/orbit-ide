@@ -1,110 +1,87 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
-import { listFiles, createFile, deleteFile, detectLanguage, readFile, renameFile } from '../../db/schema'
+import { useState, useRef, useEffect } from 'react'
+import { useFileSystem } from '../../hooks/useFileSystem'
 import { useEditorStore } from '../../stores/editorStore'
 import { useUIStore } from '../../stores/uiStore'
 import { buildTree, TreeNode } from '../../utils/treeUtils'
 import TreeItem from './TreeItem'
 import styles from './FileExplorer.module.css'
 import { Trash, File as LucideFile } from 'lucide-react'
-
-interface FileEntry {
-  path: string
-  name: string
-  language: string
-}
+import { detectLanguage } from '../../db/schema'
 
 export default function FileExplorer() {
+  const { 
+    files, 
+    activeProjectId, 
+    createFile, 
+    deleteFile, 
+    renameFile, 
+    getFileContent,
+    refreshFiles 
+  } = useFileSystem()
+
   const openTab = useEditorStore(s => s.openTab)
-  const closeTab = useEditorStore(s => s.closeTab)
   const activeTabId = useEditorStore(s => s.activeTabId)
   const openTabs = useEditorStore(s => s.openTabs)
   const setSidebarOpen = useUIStore(s => s.setSidebarOpen)
 
-  const [projectId, setProjectId] = useState<string | null>(null)
-  const [files, setFiles] = useState<FileEntry[]>([])
   const [renamingPath, setRenamingPath] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [creatingNew, setCreatingNew] = useState(false)
   const [newFileName, setNewFileName] = useState('')
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; path: string } | null>(null)
+  
   const newFileRef = useRef<HTMLInputElement>(null)
-
   const activeFilePath = openTabs.find(t => t.id === activeTabId)?.filePath
 
-  const tree = useMemo(() => buildTree(files), [files])
-
-  const refresh = useCallback(async (pid: string) => {
-    const loaded = await listFiles(pid)
-    setFiles(loaded as FileEntry[])
-  }, [])
+  const tree = buildTree(files as any)
 
   useEffect(() => {
-    const pid = localStorage.getItem('orbit-active-project')
-    if (pid) {
-      setProjectId(pid)
-      refresh(pid)
+    if (activeProjectId) {
+      refreshFiles()
     }
-    const onStorage = () => {
-      const p = localStorage.getItem('orbit-active-project')
-      if (p) { setProjectId(p); refresh(p) }
-    }
-    window.addEventListener('orbit-project-loaded', onStorage)
-    return () => window.removeEventListener('orbit-project-loaded', onStorage)
-  }, [refresh])
+  }, [activeProjectId, refreshFiles])
 
   const handleOpenFile = async (node: TreeNode) => {
     const existingTab = openTabs.find(t => t.filePath === node.path)
     if (existingTab) {
       useEditorStore.getState().setActiveTab(existingTab.id)
     } else {
-      const content = await readFile(node.path) ?? ''
+      const content = await getFileContent(node.path) ?? ''
       openTab(node.path, node.name, detectLanguage(node.name), content)
     }
     if (window.innerWidth < 720) setSidebarOpen(false)
   }
 
   const handleCreateFile = async () => {
-    if (!projectId) return
     const name = newFileName.trim()
     if (!name) { setCreatingNew(false); return }
     try {
-      const path = await createFile(projectId, name)
-      await refresh(projectId)
+      const path = await createFile(name)
+      if (path) {
+        openTab(path, name, detectLanguage(name), '')
+      }
       setCreatingNew(false)
       setNewFileName('')
-      openTab(path, name, detectLanguage(name), '')
     } catch {
       setCreatingNew(false)
     }
   }
 
   const handleDelete = async (path: string) => {
-    if (!projectId) return
     if (!window.confirm(`Delete "${path.split('/').pop()}"?`)) return
     await deleteFile(path)
-    await refresh(projectId)
-    const tab = openTabs.find(t => t.filePath === path)
-    if (tab) closeTab(tab.id)
     setContextMenu(null)
   }
 
   const handleRenameConfirm = async () => {
-    if (!projectId || !renamingPath) return
+    if (!renamingPath) return
     const newName = renameValue.trim()
     if (!newName || newName === renamingPath.split('/').pop()) {
       setRenamingPath(null)
       return
     }
     try {
-      const newPath = await renameFile(renamingPath, newName)
-      await refresh(projectId)
-      
-      const tab = openTabs.find(t => t.filePath === renamingPath)
-      if (tab) {
-        closeTab(tab.id)
-        const content = await readFile(newPath) ?? ''
-        openTab(newPath, newName, detectLanguage(newName), content)
-      }
+      await renameFile(renamingPath, newName)
       setRenamingPath(null)
     } catch (e) {
       console.error(e)
@@ -112,10 +89,10 @@ export default function FileExplorer() {
     }
   }
 
-  if (!projectId) {
+  if (!activeProjectId) {
     return (
       <div className={styles.explorer}>
-        <div className={styles.empty}>Loading explorer…</div>
+        <div className={styles.empty}>No project active</div>
       </div>
     )
   }

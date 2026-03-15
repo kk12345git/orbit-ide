@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { useEditorStore } from '../stores/editorStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useUIStore } from '../stores/uiStore'
+import { useFileSystemStore } from '../stores/fileSystemStore'
 import { ensureDefaultProject, listFiles } from '../db/schema'
 import AppShell from './AppShell/AppShell'
 
@@ -28,6 +29,9 @@ export default function App() {
     }
   }, [setIsOnline])
 
+  const setActiveProjectId = useFileSystemStore(s => s.setActiveProjectId)
+  const setFiles = useFileSystemStore(s => s.setFiles)
+
   // Load default project on first mount
   useEffect(() => {
     if (initialized.current) return
@@ -36,8 +40,12 @@ export default function App() {
     ;(async () => {
       try {
         const { projectId, activeFilePath } = await ensureDefaultProject()
+        setActiveProjectId(projectId)
+        
         const files = await listFiles(projectId)
-        // Open the active file (and welcome project files)
+        setFiles(files as any)
+
+        // Open the active file
         for (const f of files) {
           if (f.path === activeFilePath) {
             openTab(f.path, f.name, f.language, f.content)
@@ -47,7 +55,7 @@ export default function App() {
         console.error('[ORBIT] Failed to load default project', err)
       }
     })()
-  }, [openTab])
+  }, [openTab, setActiveProjectId, setFiles])
 
   // Global keyboard shortcuts
   useEffect(() => {
